@@ -1,0 +1,1394 @@
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+ConsoleLauncher
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game;
+
+import com.mygdx.game.Calculator.Calculator;
+
+import java.util.Scanner;
+
+public class ConsoleLauncher {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        String s = "";
+        Calculator calculator = new Calculator();
+        while (!s.equals("exit")) {
+            s = scanner.nextLine();
+            calculator.setTask(s);
+            try {
+                System.out.println(calculator.calculate(1));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+AndroidLauncher
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game;
+
+import android.os.Bundle;
+
+import com.badlogic.gdx.backends.android.AndroidApplication;
+import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
+import com.mygdx.game.Main;
+
+public class AndroidLauncher extends AndroidApplication {
+	@Override
+	protected void onCreate (Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
+		initialize(new Main(), config);
+	}
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+DesktopLauncher
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game.desktop;
+
+import com.badlogic.gdx.Files;
+import com.badlogic.gdx.backends.lwjgl.LwjglApplication;
+import com.badlogic.gdx.backends.lwjgl.LwjglApplicationConfiguration;
+import com.mygdx.game.Main;
+
+public class DesktopLauncher {
+	public static void main (String[] arg) {
+		LwjglApplicationConfiguration config = new LwjglApplicationConfiguration();
+		config.width = 1200;
+		config.height = 720;
+		config.resizable = false;
+		config.title = "Function drawer";
+		config.addIcon("icon.png" , Files.FileType.Internal);
+		new LwjglApplication(new Main(), config);
+	}
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+Beautifier
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game.Calculator;
+
+public class Beautifier {
+    private String getBraces(String s) {
+        int i = 0;
+        int braces = 0;
+        do {
+            if (s.charAt(i) == '(') {
+                braces++;
+            } else if (s.charAt(i) == ')'){
+                braces--;
+            }
+            i++;
+        } while (braces > 0);
+        String ss = s.charAt(0) + beautify(s.substring(1,i - 1)) + s.charAt(i - 1);
+        return ss;
+    }
+
+    private String nextNumber(StringBuilder s) {
+        if (s.charAt(0) == 'x') return "x";
+        int i = 0;
+        for (String function : Utils.functions) {
+            if (s.length() > function.length() && s.substring(0,function.length()).equals(function)) {
+                return s.substring(0,function.length()) + getBraces(s.substring(function.length(),s.length()));
+            }
+        }
+        if (s.charAt(0) == '(') {
+            String ss = getBraces(s.toString());
+            return ss;
+        }
+        while (Utils.isNumber(s.toString() , 0 , ++i)) { }
+
+        String ss = s.toString().substring(0 , i - 1);
+        return ss;
+    }
+
+    private int nextNumberLength(StringBuilder s) {
+        String ss = nextNumber(s);
+        int ii = ss.length();
+        return ii;
+    }
+
+    public String beautify(String s) {
+        s = s.replace("(-" , "(0-").replace(" " , "").toLowerCase();
+        if (s.charAt(0) == '-') { s = "0-" + s.substring(1,s.length()); }
+
+        StringBuilder string = new StringBuilder(s);
+        StringBuilder result = new StringBuilder();
+
+        int i = 0;
+            boolean number = true;
+        while (i < string.length()) {
+            if (number) {
+                int nextNumberLength = Utils.nextRawNumber(string).length();
+                if (nextNumberLength == 0) throw new RuntimeException("Invalid Formula");
+                result.append(nextNumber(string));
+                number = false;
+                Utils.deleteNextRawNumber(string);
+            } else {
+                if (nextNumberLength(string) == 0) {
+                    result.append(Utils.getNextOperation(string));
+                    Utils.deleteNextOperation(string);
+                } else {
+                    result.append("*");
+                }
+                number = true;
+            }
+        }
+        return result.toString();
+    }
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+Calculator
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game.Calculator;
+
+import java.util.StringTokenizer;
+
+public class Calculator {
+    public class Task {
+        private StringBuilder stringTask;
+
+        public Task(StringBuilder stringTask) {
+            this.stringTask = new StringBuilder(stringTask);
+        }
+
+        private StringBuilder calculatedBraces(StringBuilder taskCopy , double x) {
+            int openBracePosition = taskCopy.indexOf("(");
+            int closeBracePosition;
+            while (openBracePosition != -1) {
+                String brace = Utils.getRawBraces(taskCopy.substring(openBracePosition, taskCopy.length()));
+                closeBracePosition = openBracePosition + brace.length() - 1;
+
+                String addToStart = "";
+                String addToEnd = "";
+                if (openBracePosition - 1 > 0 && Utils.isNumber(taskCopy.toString() , openBracePosition - 1 , openBracePosition)) {
+                    addToStart = "*";
+                }if (closeBracePosition + 1 < taskCopy.length() && Utils.isNumber(taskCopy.toString() , closeBracePosition + 1 , closeBracePosition + 2)) {
+                    addToEnd = "*";
+                }
+
+                taskCopy.delete(openBracePosition,closeBracePosition + 1);
+
+                taskCopy.insert(openBracePosition,addToStart +  new Task(new StringBuilder(brace.substring(1, brace.length() - 1))).calculate(x) + addToEnd);
+                openBracePosition = taskCopy.indexOf("(");
+            }
+            String stringTaskCopy = taskCopy.toString();
+            if (stringTaskCopy.startsWith("(") && stringTaskCopy.endsWith(")")) {
+                stringTaskCopy = stringTaskCopy.substring(1,stringTaskCopy.length() - 1);
+            }
+            return new StringBuilder(stringTaskCopy);
+        }
+
+        private StringBuilder calculateFunctions(StringBuilder taskCopy , double x) {
+            for (int i = 0;i < taskCopy.length();i++) {
+                String nextFunction = Utils.getNextFunction(new StringBuilder(taskCopy.substring(i)));
+                for (String function : Utils.functions) {
+                    if (nextFunction.equals(function)) {
+                        boolean negative = false;
+                        if (taskCopy.charAt(i + nextFunction.length()) == '-') {
+                            negative = true;
+                            taskCopy = taskCopy.delete(i + nextFunction.length() , i + nextFunction.length() + 1);
+                        }
+                        String nextNumberString = Utils.getDoubleRawNumber(taskCopy,i + function.length());
+                        if (nextNumberString.endsWith("E")) {
+                            if (Utils.getNextOperation(taskCopy , nextNumberString.length() + nextFunction.length()).equals("-")) {
+                                Utils.deleteNextOperation(taskCopy , nextNumberString.length() + nextFunction.length());
+                                nextNumberString += "-";
+                            }
+                            nextNumberString += Utils.nextRawNumber(taskCopy , function.length() + nextNumberString.length() - (nextNumberString.endsWith("-") ? 1 : 0));
+                        }
+                        double nextNumber = Double.parseDouble(nextNumberString);
+                        if (negative) nextNumber = -nextNumber;
+                        taskCopy = taskCopy.delete(i,i+nextFunction.length() + nextNumberString.length());
+                        nextNumber = Utils.functionComputers.get(nextFunction).compute(nextNumber);
+                        taskCopy.insert(i,nextNumber);
+                    }
+                }
+            }
+            return taskCopy;
+        }
+
+        private StringBuilder calculatePowers(StringBuilder taskCopy , double x) {
+            int powerPosition = taskCopy.lastIndexOf("^");
+            int firstNumberStartPosition;
+            int firstNumberEndPosition;
+            int secondNumberStartPosition;
+            int secondNumberEndPosition;
+            double result;
+            String firstNumber;
+            String secondNumber;
+
+            while (powerPosition != -1) {
+                firstNumberEndPosition = powerPosition - 1;
+                secondNumberStartPosition = powerPosition + 1;
+                firstNumberStartPosition = firstNumberEndPosition;
+                secondNumberEndPosition = secondNumberStartPosition;
+
+                boolean b1 = false , b2 = false;
+
+                while (Utils.isNumber2(taskCopy.toString() , firstNumberStartPosition , firstNumberEndPosition + 1)) {
+                    firstNumberStartPosition--;
+                    b1 = true;
+                }
+                while (Utils.isNumber(taskCopy.toString() , secondNumberStartPosition , secondNumberEndPosition + 1)) {
+                    secondNumberEndPosition++;
+                    b2 = true;
+                }
+                if (b1) firstNumberStartPosition++;
+                if (b2) secondNumberEndPosition--;
+
+                firstNumber = taskCopy.substring(firstNumberStartPosition , firstNumberEndPosition + 1);
+                secondNumber = taskCopy.substring(secondNumberStartPosition , secondNumberEndPosition + 1);
+                System.out.println();
+                System.out.println(taskCopy);
+                System.out.println(firstNumber + "  " + firstNumberStartPosition + "  " + firstNumberEndPosition);
+                System.out.println(secondNumber + "  " + secondNumberStartPosition + "  " + secondNumberEndPosition);
+                System.out.println();
+                taskCopy = taskCopy.delete(firstNumberStartPosition , secondNumberEndPosition + 1);
+                result = Utils.primitiveComputers.get("^").compute(Double.parseDouble(firstNumber) , Double.parseDouble(secondNumber));
+                taskCopy.insert(firstNumberStartPosition , result);
+
+                powerPosition = taskCopy.indexOf("^");
+            }
+            return taskCopy;
+        }
+
+        private StringBuilder calculatePrimitives(StringBuilder taskCopy , double x) {
+            StringBuilder result;
+            result = calculateMultiplicationAndDivision(taskCopy , x);
+            result = calculatePlusAndMinus(result , x);
+            return result;
+        }
+
+        private StringBuilder calculatePlusAndMinus(StringBuilder taskCopy , double x) {
+            if (taskCopy.charAt(0) == '-') {
+                taskCopy.insert(0,0);
+            }
+            StringTokenizer tokenizer = new StringTokenizer(taskCopy.toString() , "+-" , true);
+            String nextToken = tokenizer.nextToken();
+            String nextToken2;
+            if (nextToken.endsWith("E")) {
+                nextToken += tokenizer.nextToken() + tokenizer.nextToken();
+            }
+            double tempResult = Double.parseDouble(nextToken);
+            while (tokenizer.hasMoreTokens()) {
+                nextToken = tokenizer.nextToken();
+                nextToken2 = tokenizer.nextToken();
+                if (nextToken2.endsWith("E")) {
+                    nextToken2 += tokenizer.nextToken() + tokenizer.nextToken();
+                }
+                tempResult = Utils.primitiveComputers.get(nextToken).compute(tempResult , Double.parseDouble(nextToken2));
+            }
+            return new StringBuilder(Double.toString(tempResult));
+        }
+
+        private StringBuilder calculateMultiplicationAndDivision(StringBuilder taskCopy , double x) {
+            if (taskCopy.charAt(0) == '-') {
+                taskCopy.insert(0, '0');
+            }
+            taskCopy = new StringBuilder(taskCopy.toString().replace("--", "+"));
+            taskCopy = new StringBuilder(taskCopy.toString().replace("+-", "-"));
+            StringBuilder result = new StringBuilder();
+            StringTokenizer tokenizer = new StringTokenizer(taskCopy.toString(), "+-*/", true);
+            String nextToken;
+            double tempResult = 0;
+            while (tokenizer.hasMoreTokens()) {
+                nextToken = tokenizer.nextToken();
+                if (nextToken.equals("-") || nextToken.equals("+")) {
+                    result.append(tempResult);
+                    result.append(nextToken);
+                } else if (Utils.isNumber(nextToken, 0, nextToken.length()) || nextToken.endsWith("E")) {
+                    if (nextToken.endsWith("E")) {
+                        nextToken += tokenizer.nextToken();
+                        if (nextToken.endsWith("-")) {
+                            nextToken += tokenizer.nextToken();
+                        }
+                    }
+                    tempResult = Double.parseDouble(nextToken);
+                } else {
+                    if (tokenizer.hasMoreTokens()) {
+                        boolean negative = false;
+                        String nextTokenL = tokenizer.nextToken();
+                        if (nextTokenL.equals("-")) {
+                            negative = true;
+                            nextTokenL = tokenizer.nextToken();
+                        }
+                        if (Utils.isNumber(nextTokenL, 0, nextTokenL.length()) || nextTokenL.endsWith("E")) {
+                            if (nextTokenL.endsWith("E")) {
+                                nextTokenL += tokenizer.nextToken();
+                                if (nextTokenL.endsWith("-")) {
+                                    nextTokenL += tokenizer.nextToken();
+                                }
+                            }
+                            String tmp = nextTokenL;
+                            nextTokenL = nextToken;
+                            nextToken = tmp;
+                        }
+                        try {
+                            tempResult = Utils.primitiveComputers.get(nextTokenL).compute(tempResult, Double.parseDouble(nextToken) * (negative ? -1 : 1));
+                        } catch (Exception e) {
+                        }
+                    } else {
+                        tempResult = Double.parseDouble(nextToken);
+                    }
+                }
+            }
+
+            result.append(tempResult);
+            result = new StringBuilder(result.toString().replace("--", "+"));
+            result = new StringBuilder(result.toString().replace("+-", "-"));
+            return result;
+        }
+
+        public String calculate(double x) {
+            StringBuilder taskCopy = new StringBuilder(stringTask.toString().replace("x" , "(" + Double.toString(x) + ")"));
+            if (taskCopy.toString().endsWith("+") || taskCopy.toString().endsWith("-")) throw new RuntimeException();
+            taskCopy = calculatedBraces(taskCopy , x);
+            taskCopy = calculateFunctions(taskCopy , x);
+            //taskCopy = calculatePowers(taskCopy , x);
+            taskCopy = calculatePrimitives(taskCopy , x);
+
+            return taskCopy.toString();
+        }
+    }
+
+    private StringBuilder stringTask;
+
+    private Beautifier beautifier;
+
+    private Task task;
+
+    public StringBuilder getStringTask() {
+        return stringTask;
+    }
+
+    public Calculator() {
+        this.stringTask = new StringBuilder("0");
+        this.task = new Task(stringTask);
+        this.beautifier = new Beautifier();
+    }
+
+    public void setTask(String task) {
+        this.stringTask = new StringBuilder(beautifier.beautify(task));
+        try {
+            this.task.stringTask = new StringBuilder(stringTask);
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid formula");
+        }
+    }
+
+    public double calculate(double x) {
+        try {
+            return Double.parseDouble(task.calculate(x));
+        } catch (RuntimeException e) {
+            //e.printStackTrace();
+            throw new RuntimeException("Invalid formula");
+        }
+    }
+}
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+Utils
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game.Calculator;
+
+import java.util.HashMap;
+import java.util.Map;
+
+class Utils {
+    public interface FunctionComputer {
+        double compute(double x);
+    }
+
+    public interface PrimitiveComputer {
+        double compute(double a , double b);
+    }
+
+    public static String[] operations = {
+            "+",
+            "-",
+            "*",
+            "/",
+    };
+
+    public static String[] functions = {
+            "sin",
+            "cos",
+            "tg",
+            "tan", // = tg
+            "ctg",
+            "cot", // = ctg
+            "√",
+            "sqrt", // = √
+            "sqr",
+            "abs",
+            "round",
+            "sign"
+    };
+
+    public static Map<String,PrimitiveComputer> primitiveComputers = new HashMap<String,PrimitiveComputer>() {
+        {
+            put("+", new PrimitiveComputer() {
+                @Override
+                public double compute(double a, double b) {
+                    return a + b;
+                }
+            });
+            put("-", new PrimitiveComputer() {
+                @Override
+                public double compute(double a, double b) {
+                    return a - b;
+                }
+            });
+            put("*", new PrimitiveComputer() {
+                @Override
+                public double compute(double a, double b) {
+                    return a * b;
+                }
+            });
+            put("/", new PrimitiveComputer() {
+                @Override
+                public double compute(double a, double b) {
+                    return a / b;
+                }
+            });
+            put("^", new PrimitiveComputer() {
+                @Override
+                public double compute(double a, double b) {
+                    return Math.pow(a , b);
+                }
+            });
+        }
+    };
+
+    public static Map<String,FunctionComputer> functionComputers = new HashMap<String,FunctionComputer>() {
+        {
+            put("sin", new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.sin(x);
+                }
+            });
+            put("cos", new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.cos(x);
+                }
+            });
+            put("tg" , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.tan(x);
+                }
+            });
+            put("tan", new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.tan(x);
+                }
+            });
+            put("cot", new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return 1 / Math.tan(x);
+                }
+            });
+            put("ctg", new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return 1 / Math.tan(x);
+                }
+            });
+            put("√"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.sqrt(x);
+                }
+            });
+            put("sqrt"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.sqrt(x);
+                }
+            });
+            put("sqr"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.pow(x , 2);
+                }
+            });
+            put("abs"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.abs(x);
+                }
+            });
+            put("round"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return Math.round(x);
+                }
+            });
+            put("sign"  , new FunctionComputer() {
+                @Override
+                public double compute(double x) {
+                    return (x == 0) ? 0 : (x > 0 ? 1 : -1);
+                }
+            });
+        }
+    };
+
+    private static boolean isNumber(char c) {
+        if(c == '0' || c == '1' || c == '2' || c == '3' || c == '4' || c == '5' || c == '6' || c == '7' || c == '8' || c == '9') {
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean isNumber(String s, int start, int end) {
+//        boolean point = false;
+//        char[] chars = s.toCharArray();
+//
+//        for (int i = start;i < end;i++) {
+//            if (chars[i] == '.' && point) {
+//                return false;
+//            }
+//
+//            if (chars[i] == '.') {
+//                point = true;
+//            } else if (chars[i] == 'E') {
+//                point = false;
+//                i++;
+//                if (chars[i] == '-') {
+//                    i++;
+//                }
+//            } else if (!isNumber(chars[i])) {
+//                return false;
+//            }
+//        }
+//        return true;
+//
+//
+        try {
+            Double.valueOf(s.substring(start , end));
+        } catch (Exception e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static boolean isNumber2(String s , int start , int end) {
+        s = s.replace("." , "");
+        if (s.contains("-") || s.contains("+")) return false;
+        try {
+            Double.valueOf(s.substring(start , end));
+        } catch (Exception e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static String getNextFunction (StringBuilder s) {
+        for (String function : functions) {
+            if (s.length() >= function.length()) {
+                if (function.equals(s.substring(0, function.length()))) return function;
+            }
+        }
+        return "";
+    }
+
+    public static String getRawBraces (String s) {
+        int i = 0;
+        int braces = 0;
+        do {
+            if (s.charAt(i) == '(') {
+                braces++;
+            } else if (s.charAt(i) == ')'){
+                braces--;
+            }
+            i++;
+        } while (braces > 0);
+        return s.substring(0,i);
+    }
+
+    public static String getDoubleRawNumber(StringBuilder s, int start) {
+        return getDoubleRawNumber(new StringBuilder(s.substring(start,s.length())));
+    }
+
+    public static String getDoubleRawNumber(StringBuilder s) {
+        if (s.charAt(0) == 'x') return "x";
+        int i = 0;
+        for (String function : functions) {
+            if (s.length() > function.length() && s.substring(0,function.length()).equals(function)) {
+                return s.substring(0,function.length()) + getRawBraces(s.substring(function.length(),s.length()));
+            }
+        }
+        if (s.charAt(0) == '(') {
+            String ss = getRawBraces(s.toString());
+            return ss;
+        }
+        try {
+            while (isNumber(s.toString(), 0, ++i)
+                    || s.charAt(i - 1) == '.'
+                    || s.charAt(i - 1) == 'E') {
+            }
+        } catch (Exception e) {
+
+        }
+        String ss = s.toString().substring(0 , i - 1);
+        return ss;
+    }
+
+    public static String nextRawNumber(StringBuilder s) {
+        if (s.charAt(0) == 'x') return "x";
+        int i = 0;
+        for (String function : functions) {
+            if (s.length() > function.length() && s.substring(0,function.length()).equals(function)) {
+                return s.substring(0,function.length()) + getRawBraces(s.substring(function.length(),s.length()));
+            }
+        }
+        if (s.charAt(0) == '(') {
+            String ss = getRawBraces(s.toString());
+            return ss;
+        }
+        while (isNumber(s.toString() , 0 , ++i)) { }
+
+        String ss = s.toString().substring(0 , i - 1);
+        return ss;
+    }
+
+    //offset - inclusive
+    public static String nextRawNumber(StringBuilder s, int start) {
+        return nextRawNumber(new StringBuilder(s.substring(start,s.length())));
+    }
+
+    public static int nextRawNumberLength(StringBuilder s) {
+        return nextRawNumber(s).length();
+    }
+
+    public static String getNextOperation(StringBuilder s) {
+        for (String operation : operations) {
+
+            String substring = s.substring(0,operation.length());
+            if (substring.equals(operation)) {
+                return substring;
+            }
+        }
+        return "";
+    }
+
+    public static String getNextOperation(StringBuilder s , int start) {
+        for (String operation : operations) {
+
+            String substring = s.substring(start,operation.length() + start);
+            if (substring.equals(operation)) {
+                return substring;
+            }
+        }
+        return "";
+    }
+
+    public static int getNextOperationLength(StringBuilder s) {
+        return getNextOperation(s).length();
+    }
+
+    public static int getNextOperationLength(StringBuilder s , int start) {
+        return getNextOperation(s , start).length();
+    }
+
+    public static void deleteNextRawNumber(StringBuilder s) {
+        s.delete(0,nextRawNumberLength(s));
+    }
+
+    public static void deleteNextRawNumber(StringBuilder s , int start) {
+        s.delete(start,nextRawNumberLength(s));
+    }
+
+    public static void deleteNextOperation(StringBuilder s) {
+        s.delete(0,getNextOperationLength(s));
+    }
+
+    public static void deleteNextOperation(StringBuilder s , int start) {
+        s.delete(start,getNextOperationLength(s , start) + start);
+    }
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+CoordinateArray
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game;
+
+import com.mygdx.game.Calculator.Calculator;
+
+public class CoordinateArray {
+    Calculator calculator;
+    double[] yCoordinates;
+    Thread calculatingThead;
+    private Field parent;
+    StringBuilder calculatorTask;
+    int threadNumber;
+
+    private Thread getnewCalculatingThead() {
+        //System.out.println("getNewCalculatingThread number " + threadNumber++);
+        return new Thread() {
+            int i;
+            @Override
+            public void run() {
+                try {
+                    for (i = 0; i < yCoordinates.length; i++) {
+                        if (i % 2 == 0) {
+                            yCoordinates[i] = calculator.calculate((-(i / 2) / parent.getScale())) * parent.getScale();
+                        } else {
+                            yCoordinates[i] = calculator.calculate(((i + 1) / 2 / parent.getScale())) * parent.getScale();
+                            if (yCoordinates[i] < -10000) {
+                                yCoordinates[i] = calculator.calculate(((i + 1) / 2 / parent.getScale())) * parent.getScale();
+                            }
+                        }
+                    }
+                } catch (Exception e) { }
+//                synchronized (calculatingThead) {
+//                    if (calculatingThead == null) {
+//                        calculatingThead = getnewCalculatingThead();
+//                        calculatingThead.start();
+//                    }
+//                }
+            }
+
+            @Override
+            public void destroy() {
+                i = yCoordinates.length;
+            }
+        };
+    }
+
+    public CoordinateArray(Calculator calculator , Field parent) {
+        this.calculator = calculator;
+        yCoordinates = new double[15000];
+        this.parent = parent;
+        calculatorTask = new StringBuilder();
+    }
+
+    public synchronized void recalculate() {
+        if (calculatingThead != null) {
+            calculatingThead.destroy();
+        }
+        if (!calculator.getStringTask().toString().equals(calculatorTask.toString())) {
+            for (int i = 0; i < yCoordinates.length; i++) {
+                yCoordinates[i] = Double.NaN;
+            }
+            calculatorTask = new StringBuilder(calculator.getStringTask());
+        }
+        calculatingThead = getnewCalculatingThead();
+        calculatingThead.start();
+    }
+
+    public double get(int x) {
+        if (x > 0) {
+            return yCoordinates[2*x - 1];
+        }
+        return yCoordinates[-2 * x];
+    }
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+Field
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.Batch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.scenes.scene2d.ui.TextField;
+import com.badlogic.gdx.scenes.scene2d.ui.Widget;
+import com.mygdx.game.Calculator.Calculator;
+
+public class Field extends Widget {
+    private ShapeRenderer renderer;
+    float x;
+    float y;
+    Calculator calculator;
+    private CoordinateArray coordinates;
+    private double scale = 1;
+    private TextField xCoordinateTextField;
+    private TextField yCoordinateTextField;
+    int halfHeight;
+    int halfWidth;
+
+    public Field(Calculator calculator , TextField xCoordinateLabel , TextField yCoordinateLabel) {
+        super();
+        halfWidth = Gdx.graphics.getWidth() / 2;
+        halfHeight = Gdx.graphics.getHeight() / 2;
+        renderer = new ShapeRenderer();
+        this.calculator = calculator;
+        transform(halfWidth , halfHeight);
+        setBounds(0,0,1,1);
+        setVisible(false);
+        coordinates = new CoordinateArray(calculator , this);
+        this.xCoordinateTextField = xCoordinateLabel;
+        this.yCoordinateTextField = yCoordinateLabel;
+    }
+
+    public double getScale() {
+        return scale;
+    }
+
+    public double getYFromX(int x) {
+        return coordinates.get(x);
+    }
+
+    public void recalculateNew() {
+        coordinates.recalculate();
+    }
+
+    public void transform(float x, float y) {
+        this.x += x;
+        this.y += y;
+        if (coordinates != null) {
+            if (this.x > coordinates.yCoordinates.length / 2 - 1) this.x = coordinates.yCoordinates.length / 2 - 1;
+            if (this.x - Gdx.graphics.getWidth() < -coordinates.yCoordinates.length / 2 + 1) this.x = -coordinates.yCoordinates.length / 2 + Gdx.graphics.getWidth() + 1;
+        }
+        setUpCoordinateTextFields();
+    }
+
+    public void setPosition(float x , float y) {
+        this.x = x;
+        this.y = y;
+        if (coordinates != null) {
+            if (this.x > coordinates.yCoordinates.length / 2) this.x = coordinates.yCoordinates.length / 2 - 1;
+            if (this.x - Gdx.graphics.getWidth() < -coordinates.yCoordinates.length / 2) this.x = -coordinates.yCoordinates.length / 2 + Gdx.graphics.getWidth() + 1;
+        }
+        setUpCoordinateTextFields();
+    }
+
+    private void setUpCoordinateTextFields() {
+        if (xCoordinateTextField != null && yCoordinateTextField != null) {
+            String newX = Float.toString((-this.x + halfWidth) / (float) scale);
+            String newY = Float.toString((-this.y + halfHeight) / (float) scale);
+
+            if (!xCoordinateTextField.getText().equals(newX)) {
+                int xCursorPosition = xCoordinateTextField.getCursorPosition();
+                xCoordinateTextField.setText(newX);
+                xCoordinateTextField.setCursorPosition(Math.min(xCursorPosition , xCoordinateTextField.getText().length()));
+            }
+            if (!yCoordinateTextField.getText().equals(newY)) {
+                int yCursorPosition = yCoordinateTextField.getCursorPosition();
+                yCoordinateTextField.setText(newY);
+                yCoordinateTextField.setCursorPosition(Math.min(yCursorPosition , yCoordinateTextField.getText().length()));
+            }
+        }
+    }
+
+    public boolean setScale(double scale) {
+        if (this.scale != scale && scale > 0) {
+            this.scale = scale;
+            recalculateNew();
+            setUpCoordinateTextFields();
+            return true;
+        }
+        return false;
+    }
+
+    public void translateToPoint() {
+        float x1 = (halfWidth - x);
+        float y1 = (float) -(coordinates.get((int) x1)) + halfHeight;
+        setPosition(x , y1);
+    }
+
+    @Override
+    public void draw(Batch batch, float parentAlpha) {
+        super.draw(batch, parentAlpha);
+        renderer.begin(ShapeRenderer.ShapeType.Line);
+        renderer.setColor(Color.RED);
+        try {
+            for (int i = 0; i < Gdx.graphics.getWidth(); i++) {
+                float x1 = (i - x);
+                float y1 = (float) (coordinates.get((int) x1) + y);
+                float x2 = x1 + 1;
+                float y2 = (float) (coordinates.get((int) x2) + y);
+                for (int j = -1;j <= 1;j++) {
+                    renderer.line(x1 + x + j, y1, x2 + x + j, y2);
+                }
+                for (int j = -1;j <= 1;j++) {
+                    renderer.line(x1 + x, y1 + j, x2 + x, y2 + j);
+                }
+            }
+        } catch (Exception e) {}
+        renderer.setColor(Color.BLACK);
+        for (int j = -1;j <= 1;j++) {
+            renderer.line(0, y + j, Gdx.graphics.getWidth(), y + j);
+            renderer.line(x + j, 0, x + j, Gdx.graphics.getHeight());
+        }
+        for (int i = 0;i <= 0;i++) {
+            renderer.line(halfWidth + i, halfHeight - 10, halfWidth + i, halfHeight + 10);
+            renderer.line(halfWidth - 10, halfHeight + i, halfWidth + 10, halfHeight + i);
+        }
+        renderer.end();
+    }
+}
+
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+Main
+/////////////////////////////////////////////////
+/////////////////////////////////////////////////
+package com.mygdx.game;
+
+import com.badlogic.gdx.ApplicationAdapter;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.Sprite;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.*;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.utils.SpriteDrawable;
+import com.mygdx.game.Calculator.Calculator;
+
+public class Main extends ApplicationAdapter{
+	enum ApplicationState {
+		MAIN , HELP , TRANSLATIONS
+	}
+	private BitmapFont font;
+	private Stage stage;
+	private TextField textField;
+	private TextField scaleTextField;
+	private Button left , right;
+	private TextButton toZeroZeroButton;
+	private Calculator calculator;
+	private Label statusBar;
+	private Widget screenArea;
+	private Field coordinateAxis;
+	private Label scaleLabel;
+	private Group scale;
+	private Group helpStage;
+	private Label[] functionLabels;
+	private Button helpButton;
+	private ApplicationState applicationState = ApplicationState.MAIN;
+	private TextField xCoordinateTextField;
+	private TextField yCoordinateTextField;
+	private Label xCoordinateLabel;
+	private Label yCoordinateLabel;
+	private TextButton onFunctionLineButton;
+	private Calculator calculatorForTranslations;
+
+	private TextButton translationButton;
+	private Group translatGroup;
+	private Label xTransletionLabel;
+	private Label yTranslationLabel;
+	private Label scaleTranslation;
+	private Label goOnFunctionLine;
+	private TextField xTranslationTextField;
+	private TextField yTranslationTextField;
+	private TextField scaleTranslationTextField;
+	private TextButton goOnFunctionButton;
+	private int scaleTime;
+
+	private SpriteDrawable newDrawable(String file) {
+		return new SpriteDrawable(new Sprite(new Texture(file)));
+	}
+
+	@Override
+	public void create () {
+		font = new BitmapFont(Gdx.files.internal("Century Gothic.fnt"));
+		stage = new Stage();
+		calculator = new Calculator();
+		calculatorForTranslations = new Calculator();
+
+		yCoordinateLabel = new Label("y : " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		yCoordinateLabel.setPosition(20,20);
+
+		xCoordinateLabel = new Label("x : " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		xCoordinateLabel.setPosition(20 , yCoordinateLabel.getY() + yCoordinateLabel.getHeight() + 20);
+
+		xCoordinateTextField = new TextField("0" , new TextField.TextFieldStyle(font , new Color(1,1,1,1) , newDrawable("cursor.png") , newDrawable("selected.png") , newDrawable("scaleTextFieldBackground.png")));
+		yCoordinateTextField = new TextField("0" , new TextField.TextFieldStyle(font , new Color(1,1,1,1) , newDrawable("cursor.png") , newDrawable("selected.png") , newDrawable("scaleTextFieldBackground.png")));
+		yCoordinateTextField.setPosition(yCoordinateLabel.getX() + yCoordinateLabel.getWidth() + 20 , yCoordinateLabel.getY());
+		xCoordinateTextField.setPosition(xCoordinateLabel.getX() + xCoordinateLabel.getWidth() + 20 , xCoordinateLabel.getY());
+		yCoordinateTextField.setAlignment(1);
+		xCoordinateTextField.setAlignment(1);
+		coordinateAxis = new Field(calculator , xCoordinateTextField , yCoordinateTextField);
+		xCoordinateTextField.addListener(new ChangeListener() {
+			@Override
+			public void changed(ChangeEvent event, Actor actor) {
+				try {
+					int cursorPosition = xCoordinateTextField.getCursorPosition();
+					String s = xCoordinateTextField.getText();
+					double x = Double.parseDouble(s);
+					xCoordinateTextField.setText(Double.toString(x));
+					coordinateAxis.setPosition((float) -x * (float) coordinateAxis.getScale() + coordinateAxis.halfWidth , coordinateAxis.y);
+					xCoordinateTextField.setCursorPosition(Math.min(cursorPosition , xCoordinateTextField.getText().length()));
+				} catch (Exception e) {}
+			}
+		});
+		yCoordinateTextField.addListener(new ChangeListener() {
+			@Override
+			public void changed(ChangeEvent event, Actor actor) {
+				try {
+					int cursorPosition = yCoordinateTextField.getCursorPosition();
+					String s = yCoordinateTextField.getText();
+					double y = Double.parseDouble(s);
+					yCoordinateTextField.setText(Double.toString(y));
+					coordinateAxis.setPosition(coordinateAxis.x, (float) -y * (float) coordinateAxis.getScale() + coordinateAxis.halfHeight);
+					yCoordinateTextField.setCursorPosition(Math.min(cursorPosition , yCoordinateTextField.getText().length()));
+				} catch (Exception e) {}
+			}
+		});
+
+		screenArea = new Widget();
+		screenArea.setSize(Gdx.graphics.getWidth() , Gdx.graphics.getHeight());
+		screenArea.addListener(new ClickListener() {
+			@Override
+			public void touchDragged(InputEvent event, float x, float y, int pointer) {
+				coordinateAxis.transform(Gdx.input.getDeltaX() , -Gdx.input.getDeltaY());
+			}
+		});
+
+		textField = new TextField("123" , new TextField.TextFieldStyle(font,new Color(1,1,1,1),null,new SpriteDrawable(new Sprite(new Texture("selected.png"))),new SpriteDrawable(new Sprite(new Texture("textFieldBackground.png")))));
+		textField.setBounds(20,Gdx.graphics.getHeight() - 70,Gdx.graphics.getWidth() - 40,50);
+		textField.setOrigin(10,10);
+		textField.setAlignment(1);
+		textField.getStyle().cursor = new SpriteDrawable(new Sprite(new Texture("cursor.png")));
+		textField.addListener(new ChangeListener() {
+			@Override
+			public void changed(ChangeEvent event, Actor actor) {
+				try {
+					calculator.setTask(textField.getText());
+					calculator.calculate(1);
+					statusBar.setText("Ок");
+					coordinateAxis.recalculateNew();
+				} catch (Exception e) {
+					statusBar.setText("Неправильная формула");
+				}
+			}
+		});
+		textField.setText("x");
+		calculator.setTask("x");
+		coordinateAxis.recalculateNew();
+
+		toZeroZeroButton = new TextButton("В начало координат" , new TextButton.TextButtonStyle(new SpriteDrawable(new Sprite(new Texture("toZeroZeroButtonUp.png"))) , new SpriteDrawable(new Sprite(new Texture("toZeroZeroButtonDown.png"))) , null , font));
+		toZeroZeroButton.setPosition(Gdx.graphics.getWidth() / 2 - toZeroZeroButton.getWidth() / 2,toZeroZeroButton.getY() + 20);
+		toZeroZeroButton.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				coordinateAxis.transform(-coordinateAxis.x + Gdx.graphics.getWidth() / 2, -coordinateAxis.y + Gdx.graphics.getHeight() / 2);
+			}
+		});
+
+		onFunctionLineButton = new TextButton("На линию графика" , new TextButton.TextButtonStyle(new SpriteDrawable(new Sprite(new Texture("toZeroZeroButtonUp.png"))) , new SpriteDrawable(new Sprite(new Texture("toZeroZeroButtonDown.png"))) , null , font));
+		onFunctionLineButton.setPosition(Gdx.graphics.getWidth() / 2 - toZeroZeroButton.getWidth() / 2,toZeroZeroButton.getY() + toZeroZeroButton.getHeight() + 20);
+		onFunctionLineButton.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				coordinateAxis.translateToPoint();
+			}
+		});
+
+		statusBar = new Label("Неверная формула" , new Label.LabelStyle(font , new Color(0,0,0,1)));
+		statusBar.setText("Ок");
+		statusBar.setPosition(Gdx.graphics.getWidth() - statusBar.getWidth() - 60 , textField.getY() - 40 - statusBar.getHeight());
+		statusBar.setAlignment(32);
+
+		scaleLabel = new Label("Масштаб :" , new Label.LabelStyle(font , new Color(0,0,0,1)));
+		scaleLabel.setPosition(20,statusBar.getY());
+		scaleLabel.setAlignment(32);
+
+		scaleTextField = new TextField("1" , new TextField.TextFieldStyle(font,new Color(1,1,1,1),null,new SpriteDrawable(new Sprite(new Texture("selected.png"))),new SpriteDrawable(new Sprite(new Texture("scaleTextFieldBackground.png")))));
+		scaleTextField.setBounds(
+				scaleLabel.getWidth() + 20 + 20,
+				statusBar.getY(),
+				200,
+				50);
+		scaleTextField.setOrigin(10,10);
+		scaleTextField.setAlignment(1);
+		scaleTextField.getStyle().cursor = new SpriteDrawable(new Sprite(new Texture("cursor.png")));
+		scaleTextField.addListener(new ChangeListener() {
+			@Override
+			public void changed(ChangeEvent event, Actor actor) {
+				try {
+					coordinateAxis.setScale(Double.parseDouble(scaleTextField.getText()));
+				} catch (Exception e) { }
+			}
+		});
+
+		statusBar.setText("Ок");
+
+		scale = new Group();
+		scale.addActor(scaleLabel);
+		scale.addActor(scaleTextField);
+
+		left = new Button(new SpriteDrawable(new Sprite(new Texture("leftArrow.png"))) , new SpriteDrawable(new Sprite(new Texture("pressedLeftArrow.png"))));
+		left.setPosition(20,scaleLabel.getY() - 40 - left.getHeight());
+		left.setSize(90,60);
+		left.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				try {
+					textField.setCursorPosition(textField.getCursorPosition() - 1);
+				} catch (Exception e) {}
+			}
+		});
+
+		right = new Button(new SpriteDrawable(new Sprite(new Texture("rightArrow.png"))) , new SpriteDrawable(new Sprite(new Texture("pressedRightArrow.png"))));
+		right.setSize(90,60);
+		right.setPosition(Gdx.graphics.getWidth() -  20 - right.getWidth(),scaleLabel.getY() - 40 - left.getHeight());
+		right.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				try {
+					textField.setCursorPosition(textField.getCursorPosition() + 1);
+				} catch (Exception e) {}
+			}
+		});
+
+		translationButton = new TextButton("Преобразования" , new TextButton.TextButtonStyle(newDrawable("toZeroZeroButtonUp.png") , newDrawable("toZeroZeroButtonDown.png") , null , font));
+		translationButton.setPosition(left.getX() , left.getY() - 20 - translationButton.getHeight());
+		translationButton.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				if (applicationState == ApplicationState.TRANSLATIONS) {
+					applicationState = ApplicationState.MAIN;
+				} else {
+					applicationState = ApplicationState.TRANSLATIONS;
+				}
+			}
+		});
+
+		boolean windows = System.getProperty("os.name").toLowerCase().contains("windows");
+
+		Group group = new Group();
+		group.addActor(screenArea);
+		group.addActor(statusBar);
+		group.addActor(textField);
+		if (!windows) {
+			group.addActor(left);
+			group.addActor(right);
+			statusBar.setPosition(Gdx.graphics.getWidth() / 2 - statusBar.getWidth() / 2 , left.getY());
+			onFunctionLineButton.setX(Gdx.graphics.getWidth() - 20 - 50 - 20 - onFunctionLineButton.getWidth());
+			toZeroZeroButton.setX(Gdx.graphics.getWidth() - 20 - 50 - 20 - toZeroZeroButton.getWidth());
+		} else {
+			left = null;
+			right = null;
+			translationButton.setPosition(scaleLabel.getX() , scaleLabel.getY() - 20 - translationButton.getHeight());
+		}
+
+		translatGroup = new Group();
+
+		xTransletionLabel = new Label("x будет увеличиваться на " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		xTransletionLabel.setPosition(translationButton.getX() + 50, translationButton.getY() - 20 - xTransletionLabel.getHeight());
+		translatGroup.addActor(xTransletionLabel);
+
+		xTranslationTextField = new TextField("0" , new TextField.TextFieldStyle(font , new Color(1,1,1,1) , newDrawable("cursor.png") , newDrawable("selected.png") , newDrawable("scaleTextFieldBackground.png")));
+		if (windows) {
+			xTranslationTextField.setPosition(xTransletionLabel.getX() + xTransletionLabel.getWidth() + 20, xTransletionLabel.getY());
+		} else {
+			xTranslationTextField.setPosition(xTransletionLabel.getX(), xTransletionLabel.getY() - 20 - xTranslationTextField.getHeight());
+		}
+		xTranslationTextField.setAlignment(1);
+		translatGroup.addActor(xTranslationTextField);
+
+		yTranslationLabel = new Label("y будет увеличиваться на " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		yTranslationLabel.setPosition(xTransletionLabel.getX() , xTranslationTextField.getY() - 20 - yTranslationLabel.getHeight());
+		translatGroup.addActor(yTranslationLabel);
+
+		yTranslationTextField = new TextField("0" , new TextField.TextFieldStyle(font , new Color(1,1,1,1) , newDrawable("cursor.png") , newDrawable("selected.png") , newDrawable("scaleTextFieldBackground.png")));
+		if (windows) {
+			yTranslationTextField.setPosition(yTranslationLabel.getX() + yTranslationLabel.getWidth() + 20, yTranslationLabel.getY());
+		} else {
+			yTranslationTextField.setPosition(yTranslationLabel.getX(), yTranslationLabel.getY() - 20 - yTranslationTextField.getHeight());
+		}
+		yTranslationTextField.setAlignment(1);
+		translatGroup.addActor(yTranslationTextField);
+
+		scaleTranslation = new Label("Масштаб будет увеличиваться на " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		scaleTranslation.setPosition(yTranslationLabel.getX() , yTranslationTextField.getY() - 20 - scaleTranslation.getHeight());
+		translatGroup.addActor(scaleTranslation);
+
+		scaleTranslationTextField = new TextField("0" , new TextField.TextFieldStyle(font , new Color(1,1,1,1) , newDrawable("cursor.png") , newDrawable("selected.png") , newDrawable("scaleTextFieldBackground.png")));
+		if (windows) {
+			scaleTranslationTextField.setPosition(scaleTranslation.getX() + scaleTranslation.getWidth() + 20, scaleTranslation.getY());
+		} else {
+			scaleTranslationTextField.setPosition(scaleTranslation.getX(), scaleTranslation.getY() - 20 - scaleTranslationTextField.getHeight());
+		}
+		scaleTranslationTextField.setAlignment(1);
+		translatGroup.addActor(scaleTranslationTextField);
+		scaleTranslationTextField.addListener(new ChangeListener() {
+			@Override
+			public void changed(ChangeEvent event, Actor actor) {
+				coordinateAxis.recalculateNew();
+			}
+		});
+
+		goOnFunctionLine = new Label("Следовать графику : " , new Label.LabelStyle(font , new Color(1,1,1,1)));
+		goOnFunctionLine.setPosition(scaleTranslation.getX() , scaleTranslationTextField.getY() - 20 - goOnFunctionLine.getHeight());
+		translatGroup.addActor(goOnFunctionLine);
+
+		goOnFunctionButton = new TextButton("Нет" , new TextButton.TextButtonStyle(newDrawable("toZeroZeroButtonUp.png") , newDrawable("toZeroZeroButtonDown.png") , null , font));
+		if (windows) {
+			goOnFunctionButton.setPosition(goOnFunctionLine.getX() + goOnFunctionLine.getWidth() + 20, goOnFunctionLine.getY());
+		} else {
+			goOnFunctionButton.setPosition(goOnFunctionLine.getX(), goOnFunctionLine.getY() - 20 - goOnFunctionButton.getHeight());
+		}
+		translatGroup.addActor(goOnFunctionButton);
+		goOnFunctionButton.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				if (!goOnFunctionButton.getText().toString().equals("Да")) {
+					goOnFunctionButton.setText("Да");
+				} else {
+					goOnFunctionButton.setText("Нет");
+				}
+			}
+		});
+
+
+		group.addActor(toZeroZeroButton);
+		group.addActor(onFunctionLineButton);
+		group.addActor(scaleLabel);
+		group.addActor(scale);
+		group.addActor(xCoordinateTextField);
+		group.addActor(yCoordinateTextField);
+		group.addActor(xCoordinateLabel);
+		group.addActor(yCoordinateLabel);
+		group.addActor(translationButton);
+		group.addActor(translatGroup);
+
+		helpButton = new Button(new SpriteDrawable(new Sprite(new Texture("helpButton.png"))) , new SpriteDrawable(new Sprite(new Texture("pressedHelpButton.png"))));
+		helpButton.setPosition(Gdx.graphics.getWidth() - helpButton.getWidth() - 20 , 20);
+		helpButton.addListener(new ClickListener() {
+			@Override
+			public void clicked(InputEvent event, float x, float y) {
+				if (applicationState == ApplicationState.MAIN) {
+					applicationState = ApplicationState.HELP;
+				} else if (applicationState == ApplicationState.HELP) {
+					applicationState = ApplicationState.MAIN;
+				}
+				if (applicationState == ApplicationState.MAIN) {
+					stage.clear();
+					stage.addActor(group);
+					stage.addActor(helpStage);
+					stage.addActor(coordinateAxis);
+					stage.addActor(helpButton);
+				} else if (applicationState == ApplicationState.HELP){
+					stage.clear();
+					stage.addActor(helpStage);
+					stage.addActor(helpButton);
+				}
+			}
+		});
+		group.addActor(helpButton);
+
+
+		stage.addActor(group);
+
+		coordinateAxis.calculator.setTask("x");
+		coordinateAxis.recalculateNew();
+
+
+		helpStage = new Group();
+
+		int functionLabelCount = 9;
+		functionLabels = new Label[functionLabelCount];
+		Label.LabelStyle labelStyle = new Label.LabelStyle(font , new Color(0,0,0,1));
+		functionLabels[0] = new Label("sin(1)  :  Синус еденицы" , labelStyle);
+		functionLabels[1] = new Label("cos(1)  :  Косинус еденицы" , labelStyle);
+		functionLabels[2] = new Label("tan(1) или tg(1)  :  Тангенс еденицы" , labelStyle);
+		functionLabels[3] = new Label("cot(1) или ctg(1)  :  Котангенс еденицы" , labelStyle);
+		functionLabels[4] = new Label("sqrt(1)  :  Корень из еденицы" , labelStyle);
+		functionLabels[5] = new Label("sqr(1)  :  Квадрат еденицы" , labelStyle);
+		functionLabels[6] = new Label("abs(1)  :  Модуль еденицы" , labelStyle);
+		functionLabels[7] = new Label("round(1)  :  Округление еденицы" , labelStyle);
+		functionLabels[8] = new Label("sign(1)  :  Знак еденицы (+)" , labelStyle);
+
+
+		functionLabels[0].setPosition(Gdx.graphics.getWidth() / 2 - functionLabels[0].getWidth() / 2,Gdx.graphics.getHeight() - functionLabels[0].getHeight() - 20);
+		helpStage.addActor(functionLabels[0]);
+		for (int i = 1;i < functionLabelCount;i++) {
+			functionLabels[i].setPosition(Gdx.graphics.getWidth() / 2 - functionLabels[i].getWidth() / 2,functionLabels[i - 1].getY() - functionLabels[i].getHeight() - 20);
+			helpStage.addActor(functionLabels[i]);
+		}
+
+		stage.addActor(helpStage);
+		stage.addActor(coordinateAxis);
+
+		Gdx.input.setInputProcessor(stage);
+	}
+
+	@Override
+	public void render () {
+		if (scaleTime++ == 5) {
+			try {
+				calculatorForTranslations.setTask(scaleTranslationTextField.getText());
+				if (coordinateAxis.setScale(coordinateAxis.getScale() + (float) calculatorForTranslations.calculate(-(coordinateAxis.x - coordinateAxis.halfWidth) / coordinateAxis.getScale()))) {
+					int cursorPosition = scaleTextField.getCursorPosition();
+					scaleTextField.setText(Double.toString(coordinateAxis.getScale()));
+					scaleTextField.setCursorPosition(Math.min(cursorPosition , scaleTextField.getText().length()));
+				}
+			} catch (Exception e) {}
+
+			scaleTime = 0;
+		}
+		Gdx.gl.glClearColor(1, 1, 1, 1);
+		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+		if (applicationState == ApplicationState.MAIN) {
+			helpStage.setVisible(false);
+			translatGroup.setVisible(false);
+		} else if (applicationState == ApplicationState.HELP){
+			helpStage.setVisible(true);
+			translatGroup.setVisible(false);
+		} else {
+			translatGroup.setVisible(true);
+			helpStage.setVisible(false);
+		}
+		stage.act();
+		try {
+			calculatorForTranslations.setTask(xTranslationTextField.getText());
+			coordinateAxis.transform(-(float)calculatorForTranslations.calculate(-(coordinateAxis.x - coordinateAxis.halfWidth) / coordinateAxis.getScale()) * (float) coordinateAxis.getScale(),0);
+		} catch (Exception e) {}
+
+		try {
+			coordinateAxis.transform(0, -Float.parseFloat(yTranslationTextField.getText()) * (float) coordinateAxis.getScale());
+		} catch (Exception e) {}
+		if (goOnFunctionButton.getText().toString().equals("Да")) {
+			coordinateAxis.translateToPoint();
+		}
+		stage.getBatch().begin();
+		coordinateAxis.draw(stage.getBatch() , 1);
+		stage.getBatch().end();
+		stage.getBatch().flush();
+		stage.draw();
+		stage.getBatch().flush();
+	}
+
+	@Override
+	public void dispose () {
+		this.stage.dispose();
+		this.font.dispose();
+	}
+}
